@@ -18,10 +18,16 @@ import tf
 import tf2_ros
 import time
 import yaml
+#
+import PIL
+import cv2
+from cv_bridge import CvBridge, CvBridgeError
+
+# from PIL import Image
 
 from geometry_msgs.msg import Twist, Pose2D
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import LaserScan, Image
 
 class EL5206_Robot:
     def __init__(self):
@@ -29,6 +35,9 @@ class EL5206_Robot:
         rospy.init_node('EL5206_Main_Node', anonymous=False)
 
         # Attributes
+        self.bridge = CvBridge()
+        self.currentImage = None
+        #
         self.robot_frame_id = 'base_footprint'
         self.odom_frame_id  = 'odom'
         self.currentScan =  None
@@ -55,6 +64,7 @@ class EL5206_Robot:
         rospy.Subscriber("/ground_truth/state", Odometry,  self.groundTruthCallback)
         rospy.Subscriber("/scan",               LaserScan, self.scanCallback)
         rospy.Subscriber("/target_pose",        Pose2D,    self.poseCallback)
+        self.imagesub = rospy.Subscriber("/stalker/camera_link_camera/camera_link_camera/color/image_raw",  Image,   self.image_callback)
 
         # Publishers
         self.vel_pub = rospy.Publisher('/stalker/cmd_vel', Twist, queue_size=1)
@@ -73,6 +83,15 @@ class EL5206_Robot:
     can be threaded, they may change some of the variables you are using in the 
     main code.
     """
+
+    #uwu 
+    # def imageCallback(self, msg):
+    #     self.currentImage = msg
+    def image_callback(self, data):
+
+        cv_image = self.bridge.imgmsg_to_cv2(data, 'bgr8')
+        self.currentImage = cv_image
+
     def scanCallback(self, msg):
         """
         Receives a LaserScan message and saves it self.currentScan.
@@ -453,7 +472,6 @@ class EL5206_Robot:
         #Se guarda la lectura
         self.saveLaser()
 
-
     def asssignment_4(self, Katt = 0.3, Rmax = 4, Krep = 0.0005):
         # You can use this method to solve the Assignment 4.
         # START: YOUR CODE HERE
@@ -584,14 +602,25 @@ class EL5206_Robot:
         self.printOdomvsGroundTruth()
         self.plotOdomVsGroundTruth(name = "Assignment 4")
 
-
+    def imagesave(self):
+        while self.currentImage is None:
+                pass
+        
+        img = self.currentImage
+        #self.image_callback(img)
+        #cv2.imshow("uwu", img)
+        #cv2.waitKey(3)
+        cv2.imwrite(self.path + '/results/captura.png', img)
+        print(np.shape(img))
+        #plt.savefig(img, self.path + '/results/captura.png')
 
 if __name__ == '__main__':
     node = EL5206_Robot()
     print("EL5206 Node started!")
 
     try:
-        node.dance()
+        # node.dance()
+        node.imagesave()
 
     except rospy.ROSInterruptException:
         rospy.logerr("ROS Interrupt Exception! Just ignore the exception!")

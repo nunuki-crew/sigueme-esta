@@ -2,9 +2,9 @@
 <robot name="turtlebot3_burger" xmlns:xacro="http://ros.org/wiki/xacro">
   <xacro:include filename="$(find el5206_description)/urdf/common_properties.xacro"/>
   <xacro:include filename="$(find el5206_description)/urdf/turtlebot3_burger.gazebo.xacro"/>
-  <xacro:include filename="camera.xacro" />
+  <xacro:include filename="$(find el5206_description)/urdf/camera_macro.xacro"/>
 
-
+<xacro:stereo_camera_macro prefix="stereo_camera" parent="base_link" xyz="0.06 0.0 0.08"/>
   <link name="base_footprint"/>
 
   <joint name="base_joint" type="fixed">
@@ -37,6 +37,7 @@
                izz="2.0064271e-03" />
     </inertial>
   </link>
+
   <joint name="wheel_left_joint" type="continuous">
     <parent link="base_link"/>
     <child link="wheel_left_link"/>

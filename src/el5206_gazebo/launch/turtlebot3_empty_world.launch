@@ -1,8 +1,13 @@
 <launch>
   <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
-  <arg name="x_pos" default="0.0"/>
-  <arg name="y_pos" default="0.0"/>
-  <arg name="z_pos" default="0.0"/>
+  
+  <arg name="x_stalker_pos" default="0.0"/>
+  <arg name="y_stalker_pos" default="0.0"/>
+  <arg name="z_stalker_pos" default="0.0"/>
+  
+  <arg name="x_famous_pos" default="1.0"/>
+  <arg name="y_famous_pos" default="1.0"/>
+  <arg name="z_famous_pos" default="0.0"/>
 
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/empty.world"/>
@@ -12,8 +17,31 @@
     <arg name="headless" value="false"/>
     <arg name="debug" value="false"/>
   </include>
+  
+  <group ns="stalker">
+  
+    <param name="robot_description" command="$(find xacro)/xacro --inorder $(find el5206_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
 
-  <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-urdf -model stalker -x $(arg x_stalker_pos) -y $(arg y_stalker_pos) -z $(arg z_stalker_pos) -param robot_description" />
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"  />
+  
+  
+    <node pkg="tf" type="static_transform_publisher" name="static_world_to_odom_publisher" args="$(arg x_stalker_pos) $(arg y_stalker_pos)  $(arg z_stalker_pos) 0 0 0 /world /odom 100"/>
+  
+  </group>
 
-  <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf" args="-urdf -model turtlebot3_$(arg model) -x $(arg x_pos) -y $(arg y_pos) -z $(arg z_pos) -param robot_description" />
+
+
+  <group ns="famous">
+  
+    <param name="robot_description" command="$(find xacro)/xacro --inorder $(find el5206_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
+
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-urdf -model famous -x $(arg x_famous_pos) -y $(arg y_famous_pos) -z $(arg z_famous_pos) -param robot_description" />
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"  />
+  
+  
+    <node pkg="tf" type="static_transform_publisher" name="static_world_to_odom_publisher" args="$(arg x_famous_pos) $(arg y_famous_pos)  $(arg z_famous_pos) 0 0 0 /world /odom 100"/>
+  
+  </group>  
+  
 </launch>
