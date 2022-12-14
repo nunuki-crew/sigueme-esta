@@ -602,17 +602,26 @@ class EL5206_Robot:
         self.printOdomvsGroundTruth()
         self.plotOdomVsGroundTruth(name = "Assignment 4")
 
-    def imagesave(self):
+    def get_collapsed_histogram(self, axis=0):
         while self.currentImage is None:
-                pass
-        
+            pass
         img = self.currentImage
-        #self.image_callback(img)
-        #cv2.imshow("uwu", img)
-        #cv2.waitKey(3)
-        cv2.imwrite(self.path + '/results/captura.png', img)
-        print(np.shape(img))
-        #plt.savefig(img, self.path + '/results/captura.png')
+
+        # Apply the mask
+        mask = cv2.inRange(img, (0, 50, 0), (50, 255, 50))
+        return mask.sum(axis=axis)
+
+    def get_center_of_mass(self):
+        collapsed_histogram = self.get_collapsed_histogram()
+        width = len(collapsed_histogram)
+
+        # Calculate the index corresponding to the center of mass
+        center_of_mass = self.calculate_center_of_mass_x(collapsed_histogram)
+
+    def calculate_center_of_mass_x(self, arr):
+        arr_length = len(arr)
+        return np.round((np.arange(arr_length + 1)[1:] @ arr) / (np.ones(arr_length + 1)[1:] @ arr) - 1)
+
 
 if __name__ == '__main__':
     node = EL5206_Robot()
