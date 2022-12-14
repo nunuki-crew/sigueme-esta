@@ -29,6 +29,15 @@ from geometry_msgs.msg import Twist, Pose2D
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan, Image
 
+
+CAMERA_WIDTH = 640
+CAMERA_FOV = 1.089
+MAX_LINEAR_VEL = 2
+ANGULAR_VELOCITY_CONSTANT = 1
+LINEAR_VELOCITY_CONSTANT = 1
+ALPHA_COEFF = 0.1
+
+
 class EL5206_Robot:
     def __init__(self):
         # Initialize ROS Node
@@ -602,6 +611,26 @@ class EL5206_Robot:
         self.printOdomvsGroundTruth()
         self.plotOdomVsGroundTruth(name = "Assignment 4")
 
+    def start_following(self):
+        twist_msg = Twist()
+
+        while not rospy.is_shutdown():
+            center_of_mass = self.get_center_of_mass()
+            angle = self.determine_angle(center_of_mass)
+            distance = self.get_laser_distance_to_angle(angle)
+            linear_vel = MAX_LINEAR_VEL * np.tanh(LINEAR_VELOCITY_CONSTANT * distance / MAX_LINEAR_VEL)
+
+            # Value to smooth the movement
+            alpha = np.abs(angle / np.pi) ** ALPHA_COEFF
+
+            twist_msg.linear.x = (1 - alpha) * linear_vel
+            twist_msg.angular.z = np.sign(angle) * ANGULAR_VELOCITY_CONSTANT
+            self.vel_pub.publish(twist_msg)
+
+    def determine_angle(self, position):
+        angle = self.angle_from_index(position, CAMERA_WIDTH, CAMERA_FOV)
+        return angle - CAMERA_FOV / 2
+
     def get_collapsed_histogram(self, axis=0):
         while self.currentImage is None:
             pass
@@ -615,12 +644,24 @@ class EL5206_Robot:
         collapsed_histogram = self.get_collapsed_histogram()
         width = len(collapsed_histogram)
 
+        # Darle aca el tema de si el robot no esta uwuwu
+
         # Calculate the index corresponding to the center of mass
-        center_of_mass = self.calculate_center_of_mass_x(collapsed_histogram)
+        return self.calculate_center_of_mass_x(collapsed_histogram)
 
     def calculate_center_of_mass_x(self, arr):
         arr_length = len(arr)
         return np.round((np.arange(arr_length + 1)[1:] @ arr) / (np.ones(arr_length + 1)[1:] @ arr) - 1)
+
+    def angle_from_index(self, idx, width, fov):
+        x = idx + 1
+        return fov / 2 - np.arctan((1 - 2 * x / width) * np.tan(fov / 2))
+
+    def get_laser_distance_to_angle(self, angle):
+        laser_ranges = self.currentScan
+        desired_angle = angle % (2 * np.pi)
+        idx = laser_ranges.shape[0] * desired_angle / (2 * np.pi)
+        return laser_ranges[int(np.round(idx))][0]
 
 
 if __name__ == '__main__':
