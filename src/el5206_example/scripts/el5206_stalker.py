@@ -32,9 +32,9 @@ from sensor_msgs.msg import LaserScan, Image
 
 CAMERA_WIDTH = 640
 CAMERA_FOV = 1.089
-MAX_LINEAR_VEL = 2
+MAX_LINEAR_VEL = 0.7
 ANGULAR_VELOCITY_CONSTANT = 1
-LINEAR_VELOCITY_CONSTANT = 1
+LINEAR_VELOCITY_CONSTANT = 3
 ALPHA_COEFF = 0.1
 
 
@@ -69,10 +69,10 @@ class EL5206_Robot:
         self.gtc_i = 0
 
         # Subscribers
-        rospy.Subscriber("/odom",               Odometry,  self.odometryCallback)
-        rospy.Subscriber("/ground_truth/state", Odometry,  self.groundTruthCallback)
-        rospy.Subscriber("/scan",               LaserScan, self.scanCallback)
-        rospy.Subscriber("/target_pose",        Pose2D,    self.poseCallback)
+        rospy.Subscriber("/stalker/odom",               Odometry,  self.odometryCallback)
+        rospy.Subscriber("/stalker/ground_truth/state", Odometry,  self.groundTruthCallback)
+        rospy.Subscriber("/stalker/scan",               LaserScan, self.scanCallback)
+        rospy.Subscriber("/stalker/target_pose",        Pose2D,    self.poseCallback)
         self.imagesub = rospy.Subscriber("/stalker/camera_link_camera/camera_link_camera/color/image_raw",  Image,   self.image_callback)
 
         # Publishers
@@ -616,16 +616,21 @@ class EL5206_Robot:
 
         while not rospy.is_shutdown():
             center_of_mass = self.get_center_of_mass()
-            angle = self.determine_angle(center_of_mass)
-            distance = self.get_laser_distance_to_angle(angle)
-            linear_vel = MAX_LINEAR_VEL * np.tanh(LINEAR_VELOCITY_CONSTANT * distance / MAX_LINEAR_VEL)
+            if center_of_mass is None:
+                twist_msg.linear.x = 0
+                twist_msg.angular.z = ANGULAR_VELOCITY_CONSTANT
+                self.vel_pub.publish(twist_msg)
+            else:
+                angle = self.determine_angle(center_of_mass)
+                distance = self.get_laser_distance_to_angle(angle)
+                linear_vel = MAX_LINEAR_VEL * np.tanh(LINEAR_VELOCITY_CONSTANT * distance / MAX_LINEAR_VEL)
 
-            # Value to smooth the movement
-            alpha = np.abs(angle / np.pi) ** ALPHA_COEFF
+                # Value to smooth the movement
+                alpha = np.abs(angle / np.pi) ** ALPHA_COEFF
 
-            twist_msg.linear.x = (1 - alpha) * linear_vel
-            twist_msg.angular.z = np.sign(angle) * ANGULAR_VELOCITY_CONSTANT
-            self.vel_pub.publish(twist_msg)
+                twist_msg.linear.x = (1 - alpha) * linear_vel
+                twist_msg.angular.z = -np.sign(angle) * alpha * ANGULAR_VELOCITY_CONSTANT
+                self.vel_pub.publish(twist_msg)
 
     def determine_angle(self, position):
         angle = self.angle_from_index(position, CAMERA_WIDTH, CAMERA_FOV)
@@ -635,7 +640,6 @@ class EL5206_Robot:
         while self.currentImage is None:
             pass
         img = self.currentImage
-
         # Apply the mask
         mask = cv2.inRange(img, (0, 50, 0), (50, 255, 50))
         return mask.sum(axis=axis)
@@ -651,17 +655,32 @@ class EL5206_Robot:
 
     def calculate_center_of_mass_x(self, arr):
         arr_length = len(arr)
-        return np.round((np.arange(arr_length + 1)[1:] @ arr) / (np.ones(arr_length + 1)[1:] @ arr) - 1)
+        numerator = np.arange(arr_length + 1)[1:] @ arr
+        denominator = np.ones(arr_length + 1)[1:] @ arr
+        if numerator == 0 and denominator == 0:
+            return None
+        else:
+            return int(np.round(numerator / denominator)) - 1
 
     def angle_from_index(self, idx, width, fov):
         x = idx + 1
         return fov / 2 - np.arctan((1 - 2 * x / width) * np.tan(fov / 2))
 
-    def get_laser_distance_to_angle(self, angle):
+    def get_parsed_laser_ranges(self):
+        while self.currentScan is None:
+            pass
         laser_ranges = self.currentScan
+        ranges = np.array(laser_ranges.ranges)
+        a_min = laser_ranges.angle_min
+        a_increment = laser_ranges.angle_increment
+        angles = np.array([a_min + i * a_increment for i, _ in enumerate(ranges)])
+        return np.stack((ranges, angles), axis=1)
+
+    def get_laser_distance_to_angle(self, angle):
+        laser_ranges = self.get_parsed_laser_ranges()
         desired_angle = angle % (2 * np.pi)
         idx = laser_ranges.shape[0] * desired_angle / (2 * np.pi)
-        return laser_ranges[int(np.round(idx))][0]
+        return laser_ranges[int(np.round(idx)) - 1][0]
 
 
 if __name__ == '__main__':
@@ -670,7 +689,7 @@ if __name__ == '__main__':
 
     try:
         # node.dance()
-        node.imagesave()
+        node.start_following()
 
     except rospy.ROSInterruptException:
         rospy.logerr("ROS Interrupt Exception! Just ignore the exception!")
